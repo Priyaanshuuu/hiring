@@ -14,9 +14,6 @@ interface ContextInspectorProps {
   >;
 }
 
-/**
- * Simple deep diff: shows what changed between old and new
- */
 function computeDiff(
   oldData: Record<string, unknown> | undefined,
   newData: Record<string, unknown>
@@ -29,28 +26,26 @@ function computeDiff(
   const removed: string[] = [];
   const changed: string[] = [];
 
-  const oldKeys = new Set(Object.keys(oldData || {}));
+  const safeOldData = oldData || {};
+  const oldKeys = new Set(Object.keys(safeOldData));
   const newKeys = new Set(Object.keys(newData));
 
-  // Added keys
   newKeys.forEach((key) => {
     if (!oldKeys.has(key)) {
       added.push(key);
     }
   });
-
-  // Removed keys
+  
   oldKeys.forEach((key) => {
     if (!newKeys.has(key)) {
       removed.push(key);
     }
   });
 
-  // Changed values
   oldKeys.forEach((key) => {
     if (
       newKeys.has(key) &&
-      JSON.stringify((oldData as any)[key]) !== JSON.stringify((newData as any)[key])
+      JSON.stringify(safeOldData[key]) !== JSON.stringify(newData[key])
     ) {
       changed.push(key);
     }
@@ -59,9 +54,6 @@ function computeDiff(
   return { added, removed, changed };
 }
 
-/**
- * Recursive tree renderer for JSON
- */
 function TreeNode({
   data,
   label,
@@ -155,11 +147,9 @@ export default function ContextInspector({ snapshots }: ContextInspectorProps) {
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 text-zinc-100">
-      {/* Header */}
       <div className="p-4 border-b border-zinc-700 space-y-3">
         <h2 className="text-lg font-bold">Context Inspector</h2>
 
-        {/* Selector */}
         {snapshots.size > 1 && (
           <select
             value={selectedContextId || ""}
@@ -175,7 +165,6 @@ export default function ContextInspector({ snapshots }: ContextInspectorProps) {
           </select>
         )}
 
-        {/* Diff summary */}
         {selected.previous && (
           <div className="text-xs space-y-1">
             {diff.added.length > 0 && (
@@ -191,7 +180,6 @@ export default function ContextInspector({ snapshots }: ContextInspectorProps) {
         )}
       </div>
 
-      {/* Tree viewer */}
       <div className="flex-1 overflow-y-auto p-4 text-sm font-mono">
         <TreeNode data={selected.data} label={selected.contextId} level={0} />
       </div>
