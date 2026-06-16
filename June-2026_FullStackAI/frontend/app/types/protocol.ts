@@ -90,7 +90,7 @@ export type ConnectionState =
   | "reconnecting"
   | "error";
 
-export interface TimelineEvent extends ServerMessage {
+export type TimelineEvent = ServerMessage & {
   timestamp: number;
   clientTimestamp?: number;
   processedAt?: number;

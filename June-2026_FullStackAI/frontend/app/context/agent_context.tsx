@@ -4,10 +4,9 @@ import React, {
   createContext,
   useReducer,
   ReactNode,
-  useCallback,
   useRef,
 } from "react";
-import { ServerMessage, TimelineEvent, ConnectionState } from "../types/protocol";
+import { TimelineEvent, ConnectionState } from "../types/protocol";
 import { MessageBuffer } from "../lib/message_buffer";
 
 // Global state shape
@@ -57,14 +56,12 @@ type AgentAction =
   | { type: "UPDATE_LAST_PROCESSED_SEQ"; seq: number }
   | { type: "CLEAR_TIMELINE" };
 
-// Context creation
 export const AgentContext = createContext<{
   state: AgentState;
   dispatch: React.Dispatch<AgentAction>;
   messageBuffer: MessageBuffer;
 } | null>(null);
 
-// Initial state
 const initialState: AgentState = {
   connectionState: "disconnected",
   currentStream: {
@@ -79,7 +76,6 @@ const initialState: AgentState = {
   lastProcessedSeq: -1,
 };
 
-// Reducer
 function agentReducer(state: AgentState, action: AgentAction): AgentState {
   switch (action.type) {
     case "SET_CONNECTION_STATE":

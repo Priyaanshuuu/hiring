@@ -1,38 +1,25 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { WebSocketManager } from "../lib/webSocket_Manager";
-import { ServerMessage, ToolCallMessage, TokenMessage } from "../types/protocol";
+import { ServerMessage, ToolCallMessage, TokenMessage , ErrorMessage , ToolResultMessage} from "../types/protocol";
 import { useAgent } from "../context/agent_context";
 
-/**
- * MAIN HOOK: Orchestrates entire WebSocket protocol handling
- *
- * This is where the MAGIC happens:
- * 1. Connect to server
- * 2. Buffer and reorder messages by seq
- * 3. Update global state as messages arrive
- * 4. Send TOOL_ACKs immediately
- * 5. Handle PING/PONG heartbeats
- * 6. Detect disconnects and send RESUME
- */
 export function useWebSocket(url: string) {
   const { state, dispatch, messageBuffer } = useAgent();
 
-  // Callback: Handle incoming server messages
+  const wsManagerRef = useRef<WebSocketManager | null>(null);
+
   const handleMessage = useCallback(
     (message: ServerMessage) => {
-      // Add to buffer for seq-based reordering
       const ready = messageBuffer.add(message);
 
-      // Process all ready (contiguous) messages
       for (const msg of ready) {
         dispatch({
           type: "ADD_TIMELINE_EVENT",
           event: { ...msg, timestamp: Date.now() },
         });
 
-        // Route based on message type
         switch (msg.type) {
           case "TOKEN": {
             const tokenMsg = msg as TokenMessage;
@@ -57,9 +44,8 @@ export function useWebSocket(url: string) {
               args: toolMsg.args,
             });
 
-            // CRITICAL: Send ACK immediately
             setTimeout(() => {
-              wsManager?.send({
+              wsManagerRef.current?.send({
                 type: "TOOL_ACK",
                 call_id: toolMsg.call_id,
               });
@@ -73,7 +59,7 @@ export function useWebSocket(url: string) {
           }
 
           case "TOOL_RESULT": {
-            const resultMsg = msg as any;
+            const resultMsg = msg as ToolResultMessage;
             dispatch({
               type: "ADD_TOOL_RESULT",
               callId: resultMsg.call_id,
@@ -87,7 +73,7 @@ export function useWebSocket(url: string) {
           }
 
           case "CONTEXT_SNAPSHOT": {
-            const ctxMsg = msg as any;
+            const ctxMsg = msg;
             dispatch({
               type: "ADD_CONTEXT_SNAPSHOT",
               contextId: ctxMsg.context_id,
@@ -97,12 +83,11 @@ export function useWebSocket(url: string) {
           }
 
           case "STREAM_END": {
-            // Optional: mark stream as complete
             break;
           }
 
           case "ERROR": {
-            const errMsg = msg as any;
+            const errMsg = msg as ErrorMessage;
             dispatch({
               type: "SET_ERROR",
               error: `${errMsg.code}: ${errMsg.message}`,
@@ -110,8 +95,6 @@ export function useWebSocket(url: string) {
             break;
           }
         }
-
-        // Update the highest seq we've processed
         dispatch({
           type: "UPDATE_LAST_PROCESSED_SEQ",
           seq: msg.seq,
@@ -121,7 +104,6 @@ export function useWebSocket(url: string) {
     [dispatch, messageBuffer]
   );
 
-  // Callback: Handle connection
   const handleConnect = useCallback(() => {
     dispatch({
       type: "SET_CONNECTION_STATE",
@@ -133,21 +115,13 @@ export function useWebSocket(url: string) {
     });
   }, [dispatch]);
 
-  // Callback: Handle disconnection
-  const handleDisconnect = useCallback(
-    (code?: number, reason?: string) => {
-      dispatch({
-        type: "SET_CONNECTION_STATE",
-        state: "reconnecting",
-      });
+  const handleDisconnect = useCallback(() => {
+    dispatch({
+      type: "SET_CONNECTION_STATE",
+      state: "reconnecting",
+    });
+  }, [dispatch]);
 
-      // If we have a lastProcessedSeq, send RESUME after reconnect
-      // The reconnect will happen automatically in WebSocketManager
-    },
-    [dispatch]
-  );
-
-  // Callback: Handle error
   const handleError = useCallback(
     (error: Error) => {
       dispatch({
@@ -158,17 +132,17 @@ export function useWebSocket(url: string) {
     [dispatch]
   );
 
-  // Create WebSocket manager
-  const wsManager = new WebSocketManager({
-    url,
-    onMessage: handleMessage,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
-    onError: handleError,
-  });
-
-  // Connect on mount
   useEffect(() => {
+    const manager = new WebSocketManager({
+      url,
+      onMessage: handleMessage,
+      onConnect: handleConnect,
+      onDisconnect: handleDisconnect,
+      onError: handleError,
+    });
+
+    wsManagerRef.current = manager;
+
     dispatch({
       type: "SET_CONNECTION_STATE",
       state: "connecting",
@@ -176,7 +150,7 @@ export function useWebSocket(url: string) {
 
     (async () => {
       try {
-        await wsManager.connect();
+        await manager.connect();
       } catch (err) {
         dispatch({
           type: "SET_ERROR",
@@ -186,15 +160,16 @@ export function useWebSocket(url: string) {
     })();
 
     return () => {
-      wsManager.close();
+      manager.close();
+      wsManagerRef.current = null;
     };
-  }, [url, dispatch]);
+  }, [url, dispatch, handleMessage, handleConnect, handleDisconnect, handleError]);
 
-  // Send user message
   const sendUserMessage = useCallback(
     (content: string) => {
-      if (wsManager.isConnected()) {
-        wsManager.send({
+      const manager = wsManagerRef.current;
+      if (manager?.isConnected()) {
+        manager.send({
           type: "USER_MESSAGE",
           content,
         });
@@ -212,6 +187,6 @@ export function useWebSocket(url: string) {
   return {
     sendUserMessage,
     connectionState: state.connectionState,
-    isConnected: wsManager.isConnected(),
+    isConnected: wsManagerRef.current?.isConnected() ?? false,
   };
 }

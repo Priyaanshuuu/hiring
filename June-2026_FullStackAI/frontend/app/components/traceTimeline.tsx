@@ -7,9 +7,6 @@ interface TimelineProps {
   events: TimelineEvent[];
 }
 
-/**
- * Groups consecutive TOKEN events for readability
- */
 function groupTokens(events: TimelineEvent[]): (TimelineEvent | { type: "TOKEN_GROUP"; tokens: TimelineEvent[]; text: string })[] {
   const grouped: any[] = [];
   let tokenBuffer: TimelineEvent[] = [];
