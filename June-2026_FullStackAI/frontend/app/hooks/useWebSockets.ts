@@ -185,8 +185,9 @@ export function useWebSocket(url: string) {
   );
 
   return {
-    sendUserMessage,
-    connectionState: state.connectionState,
-    isConnected: wsManagerRef.current?.isConnected() ?? false,
+   sendUserMessage,
+  connectionState: state.connectionState,
+  isConnected: state.connectionState === 'connected'
+
   };
 }
