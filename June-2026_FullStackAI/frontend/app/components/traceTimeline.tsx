@@ -1,25 +1,29 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { TimelineEvent } from "../types/protocol";
+import { TimelineEvent, TokenGroupEvent } from "../types/protocol";
+
+type TokenTimelineEvent = Extract<TimelineEvent, { type: "TOKEN" }>;
+type ExtendedEvent = TimelineEvent | { type: "PONG"; seq?: number };
+export type ProcessedTimelineEvent = ExtendedEvent | TokenGroupEvent;
 
 interface TimelineProps {
-  events: TimelineEvent[];
+  events: ExtendedEvent[];
 }
 
-function groupTokens(events: TimelineEvent[]): (TimelineEvent | { type: "TOKEN_GROUP"; tokens: TimelineEvent[]; text: string })[] {
-  const grouped: any[] = [];
-  let tokenBuffer: TimelineEvent[] = [];
+function groupTokens(events: ExtendedEvent[]): ProcessedTimelineEvent[] {
+  const grouped: ProcessedTimelineEvent[] = [];
+  let tokenBuffer: TokenTimelineEvent[] = [];
 
   for (const event of events) {
     if (event.type === "TOKEN") {
-      tokenBuffer.push(event);
+      tokenBuffer.push(event as TokenTimelineEvent);
     } else {
       if (tokenBuffer.length > 0) {
         grouped.push({
           type: "TOKEN_GROUP",
           tokens: tokenBuffer,
-          text: tokenBuffer.map((t: any) => t.text).join(""),
+          text: tokenBuffer.map((t) => t.text).join(""),
         });
         tokenBuffer = [];
       }
@@ -31,7 +35,7 @@ function groupTokens(events: TimelineEvent[]): (TimelineEvent | { type: "TOKEN_G
     grouped.push({
       type: "TOKEN_GROUP",
       tokens: tokenBuffer,
-      text: tokenBuffer.map((t: any) => t.text).join(""),
+      text: tokenBuffer.map((t) => t.text).join(""),
     });
   }
 
@@ -40,20 +44,17 @@ function groupTokens(events: TimelineEvent[]): (TimelineEvent | { type: "TOKEN_G
 
 export default function TraceTimeline({ events }: TimelineProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
-  const [filter, setFilter] = useState<string>(""); // Filter by event type
-  const [search, setSearch] = useState<string>(""); // Search by content
+  const [filter, setFilter] = useState<string>("");
+  const [search, setSearch] = useState<string>("");
 
   const grouped = useMemo(() => groupTokens(events), [events]);
 
   const filtered = useMemo(
     () =>
-      grouped.filter((item: any) => {
-        // Filter by type
+      grouped.filter((item: ProcessedTimelineEvent) => {
         if (filter && item.type !== filter && item.type !== "TOKEN_GROUP") {
           return false;
         }
-
-        // Search in content
         if (search) {
           const searchLower = search.toLowerCase();
           if (item.type === "TOKEN_GROUP") {
@@ -81,11 +82,9 @@ export default function TraceTimeline({ events }: TimelineProps) {
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 text-zinc-100">
-      {/* Header */}
       <div className="p-4 border-b border-zinc-700 space-y-3">
         <h2 className="text-lg font-bold">Protocol Timeline</h2>
 
-        {/* Filters */}
         <div className="flex gap-2">
           <select
             value={filter}
@@ -116,9 +115,8 @@ export default function TraceTimeline({ events }: TimelineProps) {
         </div>
       </div>
 
-      {/* Timeline */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-xs">
-        {filtered.map((item: any, idx) => (
+        {filtered.map((item: ProcessedTimelineEvent, idx: number) => (
           <div key={idx} className="border-l-2 border-zinc-700 pl-3 py-1">
             {item.type === "TOKEN_GROUP" ? (
               <div>
@@ -129,7 +127,7 @@ export default function TraceTimeline({ events }: TimelineProps) {
                   📝 Tokens ({item.tokens.length}) · {item.text.length} chars
                 </button>
                 {expandedGroups.has(idx) && (
-                  <div className="mt-2 p-2 bg-zinc-800 rounded text-zinc-300 whitespace-pre-wrap break-words">
+                  <div className="mt-2 p-2 bg-zinc-800 rounded text-zinc-300 whitespace-pre-wrap wrap-break-word">
                     {item.text}
                   </div>
                 )}
@@ -183,7 +181,7 @@ export default function TraceTimeline({ events }: TimelineProps) {
               </div>
             ) : (
               <div className="text-red-400">
-                ⚠️ {item.type} [{item.seq}]
+                ⚠️ {item.type} {"seq" in item ? `[${item.seq}]` : ""}
               </div>
             )}
           </div>

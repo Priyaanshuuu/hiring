@@ -83,6 +83,16 @@ export interface ToolAckPayload {
   call_id: string;
 }
 
+export interface TokenGroupEvent {
+  type: "TOKEN_GROUP";
+  tokens: TimelineEvent[];
+  text: string;
+}
+
+export type ProcessedTimelineEvent = TimelineEvent | TokenGroupEvent;
+
+export type TokenTimelineEvent = Extract<TimelineEvent, { type: "TOKEN" }>;
+
 export type ConnectionState =
   | "disconnected"
   | "connecting"
